@@ -1,12 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+
 	"image"
 	"image/color"
 	"image/gif"
-	"log"
-	"os"
+
+	"github.com/ChimeraCoder/anaconda"
 )
 
 const ()
@@ -19,7 +25,53 @@ func init() {
 
 }
 
+type ClientSecret struct {
+	Key    string `json:"key"`
+	Secret string `json:"secret"`
+
+	AccessToken  string `json:"access_token"`
+	AccessSecret string `json:"access_token_secret"`
+}
+
+func loadClientSecret(filename string) (*ClientSecret, error) {
+	jsonBlob, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	var cs ClientSecret
+	err = json.Unmarshal(jsonBlob, &cs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cs, nil
+}
+
+func startTwitterAPI() (*anaconda.TwitterApi, error) {
+	secret, err := loadClientSecret("_secret.json")
+	if err != nil {
+		log.Fatalln("Secret Missing: %s", err)
+		return nil, err
+	}
+
+	anaconda.SetConsumerKey(secret.Key)
+	anaconda.SetConsumerSecret(secret.Secret)
+	api := anaconda.NewTwitterApi(secret.AccessToken, secret.AccessSecret)
+	return api, nil
+}
+
 func main() {
+
+	api, _ := startTwitterAPI()
+	search_result, err := api.GetSearch("golang", nil)
+	if err != nil {
+		panic(err)
+	}
+	for _, tweet := range search_result.Statuses {
+		fmt.Println(">>", tweet.Text)
+	}
+
 	log.Println("Generating")
 	colList := color.Palette{
 		color.RGBA{0x00, 0x00, 0x00, 0x00},
@@ -48,15 +100,15 @@ func main() {
 	}
 
 	gifData := gif.GIF{
-		Image:     newI,
-		Delay:     []int{10, 10, 10, 10, 10},
-		LoopCount: -1,
+		Image:           newI,
+		Delay:           []int{10, 10, 10, 10, 10},
+		LoopCount:       -1,
+		BackgroundIndex: 0,
 		Config: image.Config{
 			ColorModel: colList,
 			Width:      100,
 			Height:     100,
 		},
-		BackgroundIndex: 0,
 	}
 
 	f, e := os.Create("test.gif")
