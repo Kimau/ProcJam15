@@ -73,6 +73,7 @@ type FireWork struct {
 	colID                  uint8
 	bundle                 []FireWork
 	tweet                  *anaconda.Tweet
+	text                   string
 }
 
 func hash(s string) int64 {
@@ -88,12 +89,13 @@ func genFireworkFromWord(tword string, srcFire *FireWork) FireWork {
 	f := FireWork{
 		x:     rGen.Float64()*10.0 - 5.0,
 		y:     rGen.Float64()*10.0 - 5.0,
-		t:     rGen.Float64() * 10.0,
+		t:     rGen.Float64()*10.0 + 5.0,
 		d:     0,
-		dx:    rGen.Float64() - 0.5,
-		dy:    rGen.Float64() - 0.5,
+		dx:    (rGen.Float64() - 0.5) * 10.0,
+		dy:    (rGen.Float64() - 0.5) * 10.0,
 		sz:    float64(len(tword)) * 0.3,
 		colID: srcFire.colID,
+		text:  tword[0:1],
 	}
 
 	return f
@@ -127,10 +129,11 @@ func genFireworkFromTweet(tweets []anaconda.Tweet, i int, w float64, h float64) 
 		sz:    6.0,
 		colID: uint8((twt.Id % 3) + 1),
 		tweet: twt,
+		text:  twt.Text[0:1],
 	}
 
 	tx := w*0.25 + w*0.5*float64(timestamp.Second())/60.0
-	ty := h*0.6 - h*relLen*0.35
+	ty := h*0.3 - h*relLen*0.35
 
 	f.dx = (tx - f.x) / f.t
 	f.dy = (ty - f.y) / f.t
@@ -191,7 +194,7 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 				gc.SetStrokeColor(colList[f.colID])
 
 				gc.MoveTo(f.x, f.y)
-				gc.FillStringAt("@", f.x-4, f.y+4)
+				gc.FillStringAt(f.text, f.x-4, f.y+4)
 
 				gc.MoveTo(f.x, f.y)
 				gc.SetLineWidth(f.sz)
@@ -205,10 +208,18 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 				f.x += f.dx
 				f.y += f.dy
 				f.t -= 1.0
+
+				f.dy += 0.3
 			}
 
 			if f.t > 0 {
 				newFList = append(newFList, f)
+			} else if len(f.bundle) > 0 {
+				for _, subF := range f.bundle {
+					subF.x += f.x
+					subF.y += f.y
+					newFList = append(newFList, subF)
+				}
 			}
 		}
 
