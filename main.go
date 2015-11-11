@@ -152,7 +152,7 @@ func genFireworkFromTweet(tweets []anaconda.Tweet, i int, w float64, h float64) 
 	return f
 }
 
-func genTwitterGif(tweets []anaconda.Tweet, username string) (string, error) {
+func genTwitterGif(tweets []anaconda.Tweet, username string, tid int64) (string, error) {
 	wid := 440
 	height := 220
 
@@ -282,7 +282,7 @@ func genTwitterGif(tweets []anaconda.Tweet, username string) (string, error) {
 		},
 	}
 
-	fn := fmt.Sprintf("%s_%d.gif", username, time.Now().Unix())
+	fn := fmt.Sprintf("%s_%d.gif", username, tid)
 
 	f, e := os.Create(fn)
 	if e != nil {
@@ -327,7 +327,19 @@ func postImageTweet(api *anaconda.TwitterApi, TwitID string, gifFile string) err
 	return nil
 }
 
-func GenerateFireworkFor(api *anaconda.TwitterApi, username string) error {
+func Exists(name string) bool {
+	_, err := os.Stat(name)
+	return !os.IsNotExist(err)
+}
+
+func GenerateFireworkFor(api *anaconda.TwitterApi, username string, tid int64) error {
+
+	checkFile := fmt.Sprintf("%s_%d.gif", username, tid)
+	if Exists(checkFile) {
+		fmt.Println("Already Exsists")
+		return nil
+	}
+
 	v := url.Values{}
 	v.Set("screen_name", username)
 	v.Set("count", "30")
@@ -336,7 +348,7 @@ func GenerateFireworkFor(api *anaconda.TwitterApi, username string) error {
 		return err
 	}
 
-	gifFile, e := genTwitterGif(search_result, username)
+	gifFile, e := genTwitterGif(search_result, username, tid)
 	if e != nil {
 		return e
 	}
@@ -382,16 +394,28 @@ func main() {
 		// Tweets
 		var tweets []anaconda.Tweet
 		tweets, err = api.GetMentionsTimeline(v)
-		fmt.Printf("Retrieved %s mentions.", len(tweets))
+		fmt.Printf("Retrieved %d mentions. \n", len(tweets))
 		if err != nil {
 			fmt.Println(err)
 		} else {
 
+			mentionMap := make(map[string]int64)
+
 			for _, t := range tweets {
-				fmt.Println("Generate Fireworks for ", t.User.ScreenName)
-				err = GenerateFireworkFor(api, t.User.ScreenName)
-				if lastId < t.Id {
-					lastId = t.Id
+				_, ok := mentionMap[t.User.ScreenName]
+				if ok {
+					// Already Gen
+					if lastId < t.Id {
+						lastId = t.Id
+					}
+				} else {
+
+					mentionMap[t.User.ScreenName] = t.Id
+					fmt.Println("Generate Fireworks for ", t.User.ScreenName, t.Id)
+					err = GenerateFireworkFor(api, t.User.ScreenName, t.Id)
+					if lastId < t.Id {
+						lastId = t.Id
+					}
 				}
 			}
 		}
