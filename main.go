@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,7 +11,9 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"image"
@@ -23,14 +26,17 @@ import (
 	"github.com/llgcode/draw2d/draw2dimg"
 )
 
-const ()
+const (
+	NOOF_COLOURS = 6
+)
 
 var (
 	debug = flag.Bool("debug", false, "Debug Flags On")
+	live  = flag.Bool("live", false, "Actual Live Tweet")
 )
 
 func init() {
-
+	flag.Parse()
 }
 
 type ClientSecret struct {
@@ -128,7 +134,7 @@ func genFireworkFromTweet(tweets []anaconda.Tweet, i int, w float64, h float64) 
 		dx:    0.0,
 		dy:    -3.0,
 		sz:    6.0,
-		colID: uint8((twt.Id % 3) + 1),
+		colID: uint8((twt.Id % NOOF_COLOURS) + 1),
 		tweet: twt,
 		text:  twt.Text[0:1],
 	}
@@ -146,18 +152,19 @@ func genFireworkFromTweet(tweets []anaconda.Tweet, i int, w float64, h float64) 
 	return f
 }
 
-func genTwitterGif(tweets []anaconda.Tweet) {
+func genTwitterGif(tweets []anaconda.Tweet, username string) (string, error) {
 	wid := 440
 	height := 220
 
 	colList := color.Palette{
 		color.RGBA{0x00, 0x00, 0x00, 0xFF},
 
-		color.RGBA{0xFF, 0x00, 0x00, 0xFF},
-		color.RGBA{0x00, 0xFF, 0x00, 0xFF},
-		color.RGBA{0x00, 0x00, 0xFF, 0xFF},
-		color.RGBA{0x00, 0x00, 0x00, 0xFF},
-		color.RGBA{0xFF, 0xFF, 0xFF, 0xFF},
+		color.RGBA{0xFF, 0x33, 0x33, 0xFF},
+		color.RGBA{0x33, 0xFF, 0x33, 0xFF},
+		color.RGBA{0x33, 0x33, 0xFF, 0xFF},
+		color.RGBA{0xFF, 0xFF, 0x33, 0xFF},
+		color.RGBA{0xFF, 0x33, 0xFF, 0xFF},
+		color.RGBA{0x33, 0xFF, 0xFF, 0xFF},
 	}
 
 	newList := []*image.Paletted{}
@@ -275,48 +282,120 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 		},
 	}
 
-	f, e := os.Create("test.gif")
+	fn := fmt.Sprintf("%s_%d.gif", username, time.Now().Unix())
+
+	f, e := os.Create(fn)
 	if e != nil {
 		log.Println(e)
+		return "", e
 	}
 
 	e = gif.EncodeAll(f, &gifData)
 	if e != nil {
 		log.Println(e)
+		return "", e
 	}
+
+	return fn, nil
+}
+
+func postImageTweet(api *anaconda.TwitterApi, TwitID string, gifFile string) error {
+	// Post
+
+	data, err := ioutil.ReadFile(gifFile)
+	if err != nil {
+		return err
+	}
+
+	mediaResponse, err := api.UploadMedia(base64.StdEncoding.EncodeToString(data))
+	if err != nil {
+		return err
+	}
+
+	v := url.Values{}
+	v.Set("media_ids", strconv.FormatInt(mediaResponse.MediaID, 10))
+
+	tweetString := fmt.Sprintf("@%s here are your fireworks", TwitID)
+
+	result, err := api.PostTweet(tweetString, v)
+	if err != nil {
+		return err
+	} else {
+		fmt.Println(result)
+	}
+
+	return nil
+}
+
+func GenerateFireworkFor(api *anaconda.TwitterApi, username string) error {
+	v := url.Values{}
+	v.Set("screen_name", username)
+	v.Set("count", "30")
+	search_result, err := api.GetUserTimeline(v)
+	if err != nil {
+		return err
+	}
+
+	gifFile, e := genTwitterGif(search_result, username)
+	if e != nil {
+		return e
+	}
+
+	if *live {
+		return postImageTweet(api, username, gifFile)
+	} else {
+		fmt.Println("Not live: ", live, username, gifFile)
+	}
+
+	return nil
 }
 
 func main() {
 
 	api, _ := startTwitterAPI()
-	// Search
-	{
-		search_result, err := api.GetSearch("golang", nil)
-		if err != nil {
-			panic(err)
-		}
-		for _, tweet := range search_result.Statuses {
-			fmt.Println(">>", tweet.Text)
-		}
-	}
 
 	// Homeline
-	{
-		v := url.Values{}
-		v.Set("screen_name", "evilkimau")
-		v.Set("count", "30")
-		search_result, err := api.GetUserTimeline(v)
-
-		if err != nil {
-			panic(err)
-		}
-
-		for _, tweet := range search_result {
-			fmt.Println(">>", tweet.User.Name, ":", tweet.Text, "\n\t", tweet.FavoriteCount, tweet.RetweetCount)
-		}
-		genTwitterGif(search_result)
+	v := url.Values{}
+	v.Set("count", "30")
+	search_result, e2 := api.GetHomeTimeline(v)
+	if e2 != nil {
+		fmt.Println(e2)
 	}
 
-	log.Println("Generating")
+	for _, tweet := range search_result {
+		fmt.Println(">>", tweet.User.ScreenName, ":", "\t", tweet.FavoriteCount, tweet.RetweetCount)
+	}
 
+	// Refresh Loop
+	var lastId int64 = 0
+	var err error
+	for true {
+		fmt.Println("Refreshing")
+
+		// Get Mentions
+		v := url.Values{}
+		v.Set("count", "15")
+		if lastId != 0 {
+			v.Set("since_id", strconv.FormatInt(lastId, 10))
+		}
+
+		// Tweets
+		var tweets []anaconda.Tweet
+		tweets, err = api.GetMentionsTimeline(v)
+		fmt.Printf("Retrieved %s mentions.", len(tweets))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+
+			for _, t := range tweets {
+				fmt.Println("Generate Fireworks for ", t.User.ScreenName)
+				err = GenerateFireworkFor(api, t.User.ScreenName)
+				if lastId < t.Id {
+					lastId = t.Id
+				}
+			}
+		}
+
+		time.Sleep(time.Minute * 10)
+	}
 }
