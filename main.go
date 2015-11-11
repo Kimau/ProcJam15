@@ -18,6 +18,7 @@ import (
 	"image/gif"
 
 	"github.com/ChimeraCoder/anaconda"
+	"github.com/golang/freetype/raster"
 	"github.com/llgcode/draw2d"
 	"github.com/llgcode/draw2d/draw2dimg"
 )
@@ -150,7 +151,8 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 	height := 220
 
 	colList := color.Palette{
-		color.RGBA{0x00, 0x00, 0x00, 0x00},
+		color.RGBA{0x00, 0x00, 0x00, 0xFF},
+
 		color.RGBA{0xFF, 0x00, 0x00, 0xFF},
 		color.RGBA{0x00, 0xFF, 0x00, 0xFF},
 		color.RGBA{0x00, 0x00, 0xFF, 0xFF},
@@ -161,6 +163,7 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 	newList := []*image.Paletted{}
 	delayList := []int{}
 	fireworkList := []FireWork{}
+	disposalList := []byte{}
 
 	draw2d.SetFontFolder("static")
 
@@ -173,7 +176,11 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 
 	for len(fireworkList) > 0 {
 		rawImg := image.NewRGBA(boundRect)
-		gc := draw2dimg.NewGraphicContext(rawImg)
+
+		// TODO :: Create Custom Painter
+		// which does blend up
+		painter := raster.NewRGBAPainter(rawImg)
+		gc := draw2dimg.NewGraphicContextWithPainter(rawImg, painter)
 
 		gc.SetFontData(draw2d.FontData{
 			Name: "Roboto",
@@ -182,6 +189,13 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 		gc.SetFontSize(8)
 
 		gc.Clear()
+		gc.SetFillColor(colList[0])
+		gc.MoveTo(0, 0)
+		gc.LineTo(0, float64(height))
+		gc.LineTo(float64(wid), float64(height))
+		gc.LineTo(float64(wid), 0)
+		gc.Close()
+		gc.Fill()
 
 		newFList := []FireWork{}
 
@@ -190,6 +204,7 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 			if f.d > 0 {
 				f.d -= 1.0
 			} else {
+
 				gc.SetFillColor(colList[f.colID])
 				gc.SetStrokeColor(colList[f.colID])
 
@@ -222,7 +237,9 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 				}
 			}
 		}
+		fireworkList = newFList
 
+		// Make Pallette Image
 		newImg := image.NewPaletted(boundRect, colList)
 		for x := 0; x < wid; x++ {
 			for y := 0; y < height; y++ {
@@ -230,9 +247,16 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 			}
 		}
 
+		// Add Lists
+		if len(newList) == 0 {
+			disposalList = append(disposalList, gif.DisposalNone)
+		} else {
+			disposalList = append(disposalList, gif.DisposalPrevious)
+		}
+
 		newList = append(newList, newImg)
 		delayList = append(delayList, 10)
-		fireworkList = newFList
+
 	}
 
 	log.Println("Saving gif with ", len(newList), " frames")
@@ -240,8 +264,10 @@ func genTwitterGif(tweets []anaconda.Tweet) {
 	gifData := gif.GIF{
 		Image:           newList,
 		Delay:           delayList,
+		Disposal:        disposalList,
 		LoopCount:       -1,
 		BackgroundIndex: 0,
+
 		Config: image.Config{
 			ColorModel: colList,
 			Width:      wid,
