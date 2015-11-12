@@ -282,7 +282,7 @@ func genTwitterGif(tweets []anaconda.Tweet, username string, tid int64) (string,
 		},
 	}
 
-	fn := fmt.Sprintf("%s_%d.gif", username, tid)
+	// fn := fmt.Sprintf("%s_%d.gif", username, tid)
 
 	f, e := os.Create(fn)
 	if e != nil {
@@ -321,7 +321,7 @@ func postImageTweet(api *anaconda.TwitterApi, TwitID string, gifFile string) err
 	if err != nil {
 		return err
 	} else {
-		fmt.Println(result)
+		// fmt.Println(result)
 	}
 
 	return nil
