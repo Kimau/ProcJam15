@@ -32,7 +32,7 @@ const (
 
 var (
 	debug = flag.Bool("debug", false, "Debug Flags On")
-	live  = flag.Bool("live", false, "Actual Live Tweet")
+	live  = flag.Bool("live", true, "Actual Live Tweet")
 )
 
 func init() {
@@ -282,8 +282,7 @@ func genTwitterGif(tweets []anaconda.Tweet, username string, tid int64) (string,
 		},
 	}
 
-	// fn := fmt.Sprintf("%s_%d.gif", username, tid)
-
+	fn := fmt.Sprintf("%s_%d.gif", username, tid)
 	f, e := os.Create(fn)
 	if e != nil {
 		log.Println(e)
@@ -317,7 +316,7 @@ func postImageTweet(api *anaconda.TwitterApi, TwitID string, gifFile string) err
 
 	tweetString := fmt.Sprintf("@%s here are your fireworks", TwitID)
 
-	result, err := api.PostTweet(tweetString, v)
+	_, err = api.PostTweet(tweetString, v)
 	if err != nil {
 		return err
 	} else {
@@ -381,8 +380,12 @@ func main() {
 	// Refresh Loop
 	var lastId int64 = 0
 	var err error
+	var hasNewBits bool = true
 	for true {
-		fmt.Println("Refreshing")
+		if hasNewBits {
+			fmt.Printf("\nRefreshing")
+			hasNewBits = false
+		}
 
 		// Get Mentions
 		v := url.Values{}
@@ -394,7 +397,12 @@ func main() {
 		// Tweets
 		var tweets []anaconda.Tweet
 		tweets, err = api.GetMentionsTimeline(v)
-		fmt.Printf("Retrieved %d mentions. \n", len(tweets))
+		if len(tweets) > 0 {
+			fmt.Printf("\nRetrieved %d mentions. \n", len(tweets))
+			hasNewBits = true
+		} else {
+			fmt.Printf(".")
+		}
 		if err != nil {
 			fmt.Println(err)
 		} else {
