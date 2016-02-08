@@ -27,7 +27,8 @@ import (
 )
 
 const (
-	NOOF_COLOURS = 6
+	NOOF_COLOURS    = 6
+	MINUTES_TO_WAIT = 2
 )
 
 var (
@@ -298,7 +299,7 @@ func genTwitterGif(tweets []anaconda.Tweet, username string, tid int64) (string,
 	return fn, nil
 }
 
-func postImageTweet(api *anaconda.TwitterApi, TwitID string, gifFile string) error {
+func postImageTweet(api *anaconda.TwitterApi, gifFile string, t *anaconda.Tweet) error {
 	// Post
 
 	data, err := ioutil.ReadFile(gifFile)
@@ -313,8 +314,9 @@ func postImageTweet(api *anaconda.TwitterApi, TwitID string, gifFile string) err
 
 	v := url.Values{}
 	v.Set("media_ids", strconv.FormatInt(mediaResponse.MediaID, 10))
+	v.Set("in_reply_to_status_id", t.IdStr)
 
-	tweetString := fmt.Sprintf("@%s here are your fireworks", TwitID)
+	tweetString := fmt.Sprintf("@%s here are your fireworks", t.User.ScreenName)
 
 	_, err = api.PostTweet(tweetString, v)
 	if err != nil {
@@ -331,31 +333,31 @@ func Exists(name string) bool {
 	return !os.IsNotExist(err)
 }
 
-func GenerateFireworkFor(api *anaconda.TwitterApi, username string, tid int64) error {
+func GenerateFireworkFor(api *anaconda.TwitterApi, t *anaconda.Tweet) error {
 
-	checkFile := fmt.Sprintf("%s_%d.gif", username, tid)
+	checkFile := fmt.Sprintf("%s_%d.gif", t.User.ScreenName, t.Id)
 	if Exists(checkFile) {
 		fmt.Println("Already Exsists")
 		return nil
 	}
 
 	v := url.Values{}
-	v.Set("screen_name", username)
+	v.Set("screen_name", t.User.ScreenName)
 	v.Set("count", "30")
 	search_result, err := api.GetUserTimeline(v)
 	if err != nil {
 		return err
 	}
 
-	gifFile, e := genTwitterGif(search_result, username, tid)
+	gifFile, e := genTwitterGif(search_result, t.User.ScreenName, t.Id)
 	if e != nil {
 		return e
 	}
 
 	if *live {
-		return postImageTweet(api, username, gifFile)
+		return postImageTweet(api, gifFile, t)
 	} else {
-		fmt.Println("Not live: ", live, username, gifFile)
+		fmt.Println("Not live: ", live, t.User.ScreenName, gifFile)
 	}
 
 	return nil
@@ -364,6 +366,8 @@ func GenerateFireworkFor(api *anaconda.TwitterApi, username string, tid int64) e
 func main() {
 
 	api, _ := startTwitterAPI()
+
+	var startTime = time.Now()
 
 	// Homeline
 	v := url.Values{}
@@ -381,7 +385,11 @@ func main() {
 	var lastId int64 = 0
 	var err error
 	var hasNewBits bool = true
-	for true {
+	var loopMe = true
+	for loopMe {
+		// Sleep
+		time.Sleep(time.Minute * MINUTES_TO_WAIT)
+
 		if hasNewBits {
 			fmt.Printf("\nRefreshing")
 			hasNewBits = false
@@ -405,29 +413,47 @@ func main() {
 		}
 		if err != nil {
 			fmt.Println(err)
-		} else {
-
-			mentionMap := make(map[string]int64)
-
-			for _, t := range tweets {
-				_, ok := mentionMap[t.User.ScreenName]
-				if ok {
-					// Already Gen
-					if lastId < t.Id {
-						lastId = t.Id
-					}
-				} else {
-
-					mentionMap[t.User.ScreenName] = t.Id
-					fmt.Println("Generate Fireworks for ", t.User.ScreenName, t.Id)
-					err = GenerateFireworkFor(api, t.User.ScreenName, t.Id)
-					if lastId < t.Id {
-						lastId = t.Id
-					}
-				}
-			}
+			continue
 		}
 
-		time.Sleep(time.Minute * 10)
+		mentionMap := make(map[string]int64)
+
+		for _, t := range tweets {
+			// Get Last ID
+			if lastId < t.Id {
+				lastId = t.Id
+			}
+
+			ttime, _ := t.CreatedAtTime()
+			timeDiff := startTime.Sub(ttime)
+
+			if timeDiff > 0 {
+				// Old Tweet
+				if timeDiff > time.Hour {
+					fmt.Printf("Ignoring tweet from %s because its from %.0f hours ago \n", t.User.ScreenName, timeDiff.Hours())
+				} else if timeDiff > time.Minute {
+					fmt.Printf("Ignoring tweet from %s because its from %.0f minutes ago \n", t.User.ScreenName, timeDiff.Minutes())
+				} else {
+					fmt.Printf("Ignoring tweet from %s because its from %.0f seconds ago \n", t.User.ScreenName, timeDiff.Seconds())
+				}
+				continue
+			}
+
+			fmt.Printf("%s is %d \n", ttime.Sub(startTime) < 0, ttime.Sub(startTime))
+
+			v, ok := mentionMap[t.User.ScreenName]
+			if ok && v >= t.Id {
+				// Already Gen
+			} else {
+				// Generate Fireworks
+				mentionMap[t.User.ScreenName] = t.Id
+				fmt.Println("Generate Fireworks for ", t.User.ScreenName, t.Id)
+				err = GenerateFireworkFor(api, &t)
+			}
+
+			// NEXT Twet
+		}
+
+		// Next Round
 	}
 }
