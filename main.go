@@ -174,7 +174,7 @@ func genTwitterGif(tweets []anaconda.Tweet, username string, tid int64) (string,
 
 	draw2d.SetFontFolder("static")
 
-	for i, _ := range tweets {
+	for i := range tweets {
 		f := genFireworkFromTweet(tweets, i, float64(wid), float64(height))
 		fireworkList = append(fireworkList, f)
 	}
@@ -373,8 +373,16 @@ func main() {
 		fmt.Println(e2)
 	}
 
-	for _, tweet := range search_result {
-		fmt.Println(">>", tweet.User.ScreenName, ":", "\t", tweet.FavoriteCount, tweet.RetweetCount)
+	// for _, tweet := range search_result {		fmt.Println(">>", tweet.User.ScreenName, ":", "\t", tweet.FavoriteCount, tweet.RetweetCount)}
+
+	// Start Up Tweet
+	{
+		v := url.Values{}
+		_, err := api.PostTweet("@evilkimau Good Morning. I had to restart.", v)
+		if err != nil {
+			return err
+		} else {
+		}
 	}
 
 	// Refresh Loop
