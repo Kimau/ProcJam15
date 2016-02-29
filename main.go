@@ -384,7 +384,8 @@ func main() {
 		v := url.Values{}
 		_, err := api.PostTweet("@evilkimau Good Morning. I had to restart.", v)
 		if err != nil {
-			return err
+			fmt.Println(err)
+			return
 		} else {
 		}
 	}
