@@ -370,6 +370,7 @@ func main() {
 	var startTime = time.Now()
 
 	// Homeline
+	/*
 	v := url.Values{}
 	v.Set("count", "30")
 	search_result, e2 := api.GetHomeTimeline(v)
@@ -377,8 +378,9 @@ func main() {
 		fmt.Println(e2)
 	}
 
-	// for _, tweet := range search_result {		fmt.Println(">>", tweet.User.ScreenName, ":", "\t", tweet.FavoriteCount, tweet.RetweetCount)}
-
+	for _, tweet := range search_result {		fmt.Println(">>", tweet.User.ScreenName, ":", "\t", tweet.FavoriteCount, tweet.RetweetCount)}
+*/
+	
 	// Start Up Tweet
 	{
 		v := url.Values{}
